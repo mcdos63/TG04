@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import Command
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -92,6 +92,22 @@ async def delete_user(callback: CallbackQuery):
 async def exit(callback: CallbackQuery):
     await callback.message.edit_text(f"До свидания , {callback.from_user.full_name}!")
     await callback.answer()
+
+@dp.callback_query(F.data == "registration")
+async def registration(callback: CallbackQuery):
+    await callback.message.answer("Пожалуйста, поделитесь номером телефона:", reply_markup=request_phone_kb)
+    await callback.answer()
+
+@dp.message(F.contact)
+async def save_phone(message: Message):
+    phone = message.contact.phone_number
+    name = message.from_user.full_name
+    async with AsyncSessionLocal() as session:
+        new_user = User(user_id=message.from_user.id, name=name, phone=phone)
+        session.add(new_user)
+        await session.commit()
+    await message.answer(f"Спасибо, {name}! Ваш номер телефона: {phone}", reply_markup=ReplyKeyboardRemove())
+    await message.answer("Выберите, что делать дальше:", reply_markup=inline_3)
 
 @dp.message(Command("users"))
 async def get_all_users(message: Message):

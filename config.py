@@ -25,3 +25,7 @@ inline_4 = InlineKeyboardMarkup(inline_keyboard=[
    [InlineKeyboardButton(text="Музыка", url='https://my.mail.ru/music/search/все%20хиты/')],
    [InlineKeyboardButton(text="Видео", url='https://www.tiktok.com/')]
 ])
+
+request_phone_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить номер", request_contact=True)]], resize_keyboard=True,  one_time_keyboard=True)
+
+
