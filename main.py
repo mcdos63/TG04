@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import Command
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, select
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, select, desc
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -165,6 +165,31 @@ async def show_info(message: Message):
 @dp.message(Command("links"))
 async def links(message: Message):
     await message.answer("Медиа:", reply_markup=inline_4)
+
+
+@dp.message(Command("messages"))
+async def show_user_messages(message: Message):
+    user = await get_user_by_id(message.from_user.id)
+    if not user:
+        await message.answer("Вы ещё не зарегистрированы.")
+        return
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Info).where(Info.user_id == user.user_id).order_by(desc(Info.date)).limit(10)
+        )
+        messages = result.scalars().all()
+
+    if not messages:
+        await message.answer("У вас пока нет сохранённых сообщений.")
+        return
+
+    response = "Ваши последние сообщения:\n\n"
+    for msg in messages:
+        response += f"🕒 {msg.date.strftime('%d.%m %H:%M')}\n💬 {msg.text}\n\n"
+
+    await message.answer(response)
+
 
 
 # --- Точка входа ---
