@@ -3,6 +3,9 @@ import logging
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import Command
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, select
@@ -14,16 +17,15 @@ from config import *
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 
-# Инициализация бота и диспетчера
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+# --- Состояние FSM для отправки сообщения ---
+class SendMessageState(StatesGroup):
+    waiting_for_text = State()
 
 # Настройка базы данных
 DATABASE_URL = "sqlite+aiosqlite:///users.db"
 engine = create_async_engine(DATABASE_URL, echo=False)
 Base = declarative_base()
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
 
 # --- Модели ---
 class User(Base):
@@ -36,7 +38,6 @@ class User(Base):
     def __repr__(self):
         return f"<User {self.user_id}: {self.name}>"
 
-
 class Info(Base):
     __tablename__ = 'info'
     id = Column(Integer, primary_key=True)
@@ -47,6 +48,9 @@ class Info(Base):
     def __repr__(self):
         return f"<Info {self.user_id}: {self.text}>"
 
+# Инициализация бота и диспетчера
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
 
 # --- Создание таблиц ---
 async def init_db():
@@ -92,6 +96,33 @@ async def delete_user(callback: CallbackQuery):
 async def exit(callback: CallbackQuery):
     await callback.message.edit_text(f"До свидания , {callback.from_user.full_name}!")
     await callback.answer()
+
+
+
+# --- Обработка нажатия кнопки "Отправить сообщение" ---
+@dp.callback_query(F.data == "send")
+async def ask_for_message(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("Пожалуйста, введите сообщение:")
+    await state.set_state(SendMessageState.waiting_for_text)
+    await callback.answer()
+
+# --- Получение текста и сохранение в БД ---
+@dp.message(SendMessageState.waiting_for_text)
+async def save_user_text(message: Message, state: FSMContext):
+    user = await get_user_by_id(message.from_user.id)
+    if not user:
+        await message.answer("Вы ещё не зарегистрированы.")
+        await state.clear()
+        return
+
+    # Сохраняем сообщение
+    async with AsyncSessionLocal() as session:
+        new_info = Info(user_id=user.user_id, text=message.text)
+        session.add(new_info)
+        await session.commit()
+
+    await message.answer("✅ Ваше сообщение сохранено!", reply_markup=inline_3)
+    await state.clear()
 
 @dp.callback_query(F.data == "registration")
 async def registration(callback: CallbackQuery):
