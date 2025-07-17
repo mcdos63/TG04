@@ -19,3 +19,9 @@ inline_3 = InlineKeyboardMarkup(inline_keyboard=[
    [InlineKeyboardButton(text="Удалить из базы", callback_data='delete')],
    [InlineKeyboardButton(text="Пока", callback_data='exit')]
 ])
+
+inline_4 = InlineKeyboardMarkup(inline_keyboard=[
+   [InlineKeyboardButton(text="Новости", url='https://russian.rt.com/')],
+   [InlineKeyboardButton(text="Музыка", url='https://my.mail.ru/music/search/все%20хиты/')],
+   [InlineKeyboardButton(text="Видео", url='https://www.tiktok.com/')]
+])

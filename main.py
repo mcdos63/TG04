@@ -115,6 +115,10 @@ async def show_info(message: Message):
     else:
         await message.answer("Вы еще не зарегистрированы.")
 
+@dp.message(Command("links"))
+async def links(message: Message):
+    await message.answer("Медиа:", reply_markup=inline_4)
+
 
 # --- Точка входа ---
 async def main():
