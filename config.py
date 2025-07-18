@@ -22,7 +22,7 @@ def normalize_phone_number(phone: str) -> str | None:
     return None  # Не подходит под условия
 
 
-BOT_TOKEN = '7810024725:AAGqkFAfZ6rX15YGYW_miu4Km0d7lg02n0Q'
+BOT_TOKEN = 'ТОКЕН'
 
 inline_1 = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="Привет", callback_data='entry')],
