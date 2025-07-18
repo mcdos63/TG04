@@ -20,6 +20,8 @@ logging.basicConfig(level=logging.INFO)
 # --- Состояние FSM для отправки сообщения ---
 class SendMessageState(StatesGroup):
     waiting_for_text = State()
+class RegisterPhone(StatesGroup):
+    waiting_for_phone = State()
 
 # Настройка базы данных
 DATABASE_URL = "sqlite+aiosqlite:///users.db"
@@ -30,10 +32,10 @@ AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=F
 # --- Модели ---
 class User(Base):
     __tablename__ = 'user'
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, unique=True, nullable=False)
-    name = Column(String, nullable=False)
-    phone = Column(String, nullable=True)
+    name = Column(String(50), nullable=False)
+    phone = Column(String(20), nullable=True)
 
     def __repr__(self):
         return f"<User {self.user_id}: {self.name}>"
@@ -97,8 +99,6 @@ async def exit(callback: CallbackQuery):
     await callback.message.edit_text(f"До свидания , {callback.from_user.full_name}!")
     await callback.answer()
 
-
-
 # --- Обработка нажатия кнопки "Отправить сообщение" ---
 @dp.callback_query(F.data == "send")
 async def ask_for_message(callback: CallbackQuery, state: FSMContext):
@@ -126,7 +126,7 @@ async def save_user_text(message: Message, state: FSMContext):
 
 @dp.callback_query(F.data == "registration")
 async def registration(callback: CallbackQuery):
-    await callback.message.answer("Пожалуйста, поделитесь номером телефона:", reply_markup=request_phone_kb)
+    await callback.message.answer("Пожалуйста, поделитесь номером телефона:", reply_markup=choose_phone_kb)
     await callback.answer()
 
 @dp.message(F.contact)
@@ -139,6 +139,28 @@ async def save_phone(message: Message):
         await session.commit()
     await message.answer(f"Спасибо, {name}! Ваш номер телефона: {phone}", reply_markup=ReplyKeyboardRemove())
     await message.answer("Выберите, что делать дальше:", reply_markup=inline_3)
+
+@dp.message(F.text.endswith("Ввести номер вручную"))
+async def ask_phone_manually(message: Message, state: FSMContext):
+    await message.answer("Введите номер телефона в формате +7XXXXXXXXXX или 89XXXXXXXXX:", reply_markup=ReplyKeyboardRemove())
+    await state.set_state(RegisterPhone.waiting_for_phone)
+
+@dp.message(RegisterPhone.waiting_for_phone)
+async def process_phone_input(message: Message, state: FSMContext):
+    phone = message.text.strip()
+    phone = normalize_phone_number(phone)
+    if not phone:
+        await message.answer("❗ Неверный формат номера. Попробуйте снова.")
+        return
+    name = message.from_user.full_name
+    async with AsyncSessionLocal() as session:
+        new_user = User(user_id=message.from_user.id, name=name, phone=phone)
+        session.add(new_user)
+        await session.commit()
+
+    await message.answer(f"Спасибо, {name}! Ваш номер телефона: {phone}")
+    await message.answer("Выберите, что делать дальше:", reply_markup=inline_3)
+    await state.clear()
 
 @dp.message(Command("users"))
 async def get_all_users(message: Message):
@@ -190,6 +212,44 @@ async def show_user_messages(message: Message):
 
     await message.answer(response)
 
+from aiogram.types import Message
+from sqlalchemy import select, join
+from sqlalchemy.orm import aliased
+
+@dp.message(Command("all_messages"))
+async def show_all_messages(message: Message):
+    # # Проверка прав администратора (по user_id, например)
+    # if message.from_user.id != ADMIN_ID:
+    #     await message.answer("⛔ У вас нет доступа к этой команде.")
+    #     return
+
+    async with AsyncSessionLocal() as session:
+        # Объединяем таблицы User и Info по user_id
+        j = join(User, Info, User.user_id == Info.user_id)
+        result = await session.execute(
+            select(User.user_id, User.name, Info.text, Info.date).select_from(j).order_by(Info.date.desc())
+        )
+        records = result.all()
+
+    if not records:
+        await message.answer("🗃 Сообщения не найдены.")
+        return
+
+    # Формируем текст ответа
+    response = "📑 Все сохранённые сообщения:\n\n"
+    for user_id, name, text, date in records:
+        response += (
+            f"👤 {name} (ID: {user_id})\n"
+            f"🕒 {date.strftime('%d.%m %H:%M')}\n"
+            f"💬 {text}\n\n"
+        )
+
+    # Ограничим длину Telegram-сообщения
+    if len(response) > 4000:
+        await message.answer("⚠️ Сообщений слишком много. Вывожу только первые.")
+        await message.answer(response[:4000])
+    else:
+        await message.answer(response)
 
 
 # --- Точка входа ---
